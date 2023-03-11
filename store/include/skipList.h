@@ -53,13 +53,16 @@ struct VersionDispatcher<std::string> {
 template<typename K, typename V>
 class SkipNode {
  public:
-    SkipNode(const K &key, const V &value) : key(key), value(value), topLevel(BinarySelect::generate()) {
+    SkipNode(K key, V value) : key(key), value(value), topLevel(BinarySelect::generate()) {
         SkipNode<K, V> **levelNext = (SkipNode<K, V>**)malloc(sizeof(SkipNode<K, V>*) * (this->topLevel + 1));
         this->levelNext = levelNext;
         for (int i = 0;i <= this->topLevel;i++) {
             this->levelNext[i] = nullptr;
         }
     }
+
+    V& getValue() {return this->value;}
+    void setValue(V& value) {this->value = value;}
 
     void expansion(int n) {
         SkipNode<K, V> **newLevelNext = (SkipNode<K, V>**)realloc(this->levelNext, sizeof(SkipNode<K, V>*) * (n + 1));
@@ -74,9 +77,6 @@ class SkipNode {
         }
         this->topLevel = n;
     }
-
-    V& getValue() {return this->value;}
-    void setValue(V& value) {this->value = value;}
 
  public:
     K key;
@@ -107,11 +107,9 @@ template<
 >
 class SkipList {
  public:
-    SkipList() {}
+    SkipList() : total(0) {}
 
-    void init(const Node<K, V> *node) {
-        node->key = 100;
-        std::cout << "node->key " << node->key << std::endl;
+    void init(Node<K, V> *node) {
         this->head = node;
         this->maxLevel = node->topLevel;
     }
@@ -124,7 +122,7 @@ class SkipList {
     // 指定key和value，并自动new一个node，随后插入到list中
     void insertOne(const K& key, const V& value);
 
-    void deleteOne(const K &key);
+    void deleteOne(K key);
 
     void find();
 
@@ -133,7 +131,7 @@ class SkipList {
 
     // 适合查看极小量数据,debug用
     void watch() {
-        // std::cout << "list total node is " << this->total << std::endl;
+        std::cout << "list total node is " << this->total << std::endl;
         this->watchInner(typename VersionDispatcher<V>::Tag {});
     }
 
@@ -141,8 +139,8 @@ class SkipList {
     Node<K, V> *head = nullptr;
 
  private:
-    unsigned int maxLevel = ;
-    unsigned int total = 0;
+    unsigned int maxLevel;
+    unsigned int total;
 
     /**
      * 为即将插入的元素寻找“坑位”,如果没有坑位（返回false）代表新的节点需要成为head
@@ -168,7 +166,7 @@ class SkipList {
                     index[level] = current;
                     level--;
                 }
-                // 同key情况返回true
+                // 同key情况返回false
                 return true;
             }
         }
@@ -238,27 +236,6 @@ class SkipList {
         }
         std::cout << std::endl;
     }
-
-    void headTransfer(Node<K, V> &node) {
-        if (node.topLevel < this->head->topLevel) {
-             node.expansion(this->head->topLevel); 
-        }
-
-        int currentNodeLevel = 0;
-        int currentHeadLevel = 0;
-        while (currentHeadLevel <= this->head->topLevel) {
-            node.levelNext[currentNodeLevel] = this->head;
-            currentNodeLevel++;
-            currentHeadLevel++;
-        }
-        while (currentNodeLevel <= node.topLevel) {
-            node.levelNext[currentNodeLevel] = nullptr;
-            currentNodeLevel++;
-        }
-        this->maxLevel = node.topLevel > this->maxLevel ? node.topLevel : this->maxLevel;
-        this->head = &node;
-        this->total = this->total + 1;
-    }
 };
 
 
@@ -281,7 +258,25 @@ void SkipList<K, V, Node, Alloc, RandomLevel>::insertOne(Node<K, V> &node) {
 
     // 新的节点成为head
     if (!this->findHoles(node, index)) {
-        return this->headTransfer(node);
+        if (node.topLevel < this->head->topLevel) {
+             node.expansion(this->head->topLevel); 
+        }
+
+        int currentNodeLevel = 0;
+        int currentHeadLevel = 0;
+        while (currentHeadLevel <= this->head->topLevel) {
+            node.levelNext[currentNodeLevel] = this->head;
+            currentNodeLevel++;
+            currentHeadLevel++;
+        }
+        while (currentNodeLevel <= node.topLevel) {
+            node.levelNext[currentNodeLevel] = nullptr;
+            currentNodeLevel++;
+        }
+        this->maxLevel = node.topLevel > this->maxLevel ? node.topLevel : this->maxLevel;
+        this->head = &node;
+        this->total = this->total + 1;
+        return;
     }
 
     if(index[0]->key == node.key) {
