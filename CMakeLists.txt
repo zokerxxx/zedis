@@ -4,8 +4,8 @@ project(zedis)
 
 ## 通过set可以设置一些cmake相关的环境信息
 set(CMAKE_CXX_STANDARD 14)
-set(CMAKE_BUILD_TYPE "Debug")
-set(CMAKE_CXX_FLAGS_DEBUG "-g2")
+set(CMAKE_CXX_FLAGS -g)
+
 
 ## 添加子CMakeLists.txt路径
 add_subdirectory(store/src)
