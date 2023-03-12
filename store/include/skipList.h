@@ -21,6 +21,8 @@
 #include <iomanip>
 #include <vector>
 #include <algorithm>
+#include <deque>
+
 #include <string.h>
 
 #include <randomalgo/binarySelect.h>
@@ -50,15 +52,15 @@ struct VersionDispatcher<std::string> {
 /**
  * SkipNode
 */
-template<typename K, typename V>
+template<class K, class V>
 class SkipNode {
  public:
     SkipNode(const K &key, const V &value) : key(key), value(value), topLevel(BinarySelect::generate()) {
-        SkipNode<K, V> **levelNext = (SkipNode<K, V>**)malloc(sizeof(SkipNode<K, V>*) * (this->topLevel + 1));
-        this->levelNext = levelNext;
-        for (int i = 0;i <= this->topLevel;i++) {
-            this->levelNext[i] = nullptr;
-        }
+        this->init();
+    }
+
+    SkipNode(const K &key, const V &value, int level) : key(key), value(value), topLevel(level) {
+        this->init();
     }
 
     void expansion(int n) {
@@ -73,6 +75,15 @@ class SkipNode {
             this->levelNext[i] = nullptr;
         }
         this->topLevel = n;
+    }
+
+
+    void init() {
+        SkipNode<K, V> **levelNext = (SkipNode<K, V>**)malloc(sizeof(SkipNode<K, V>*) * (this->topLevel + 1));
+        this->levelNext = levelNext;
+        for (int i = 0;i <= this->topLevel;i++) {
+            this->levelNext[i] = nullptr;
+        }
     }
 
     V& getValue() {return this->value;}
@@ -109,9 +120,7 @@ class SkipList {
  public:
     SkipList() {}
 
-    void init(const Node<K, V> *node) {
-        node->key = 100;
-        std::cout << "node->key " << node->key << std::endl;
+    void init(Node<K, V> *node) {
         this->head = node;
         this->maxLevel = node->topLevel;
     }
@@ -141,13 +150,13 @@ class SkipList {
     Node<K, V> *head = nullptr;
 
  private:
-    unsigned int maxLevel = ;
+    unsigned int maxLevel = 0;
     unsigned int total = 0;
 
     /**
      * 为即将插入的元素寻找“坑位”,如果没有坑位（返回false）代表新的节点需要成为head
     */
-    bool findHoles(Node<K, V>& node, std::vector<Node<K, V>*>& index) {
+    bool findHoles(const Node<K, V>& node, std::vector<Node<K, V>*>& index) {
         int level = this->head->topLevel;
         Node<K, V> *prev, *current;
         prev = nullptr;
@@ -173,6 +182,28 @@ class SkipList {
             }
         }
         return true;
+    }
+
+    bool findNode(const K& key, std::vector<std::pair<Node<K, V>*, int> >& index) {
+        int level = this->head->topLevel;
+        Node<K, V> *prev, *current;
+        prev = nullptr;
+        current= this->head;
+        while (level != -1) {
+            while (current != nullptr && key > current->key) {
+                prev = current;
+                current = current->levelNext[level];
+            }
+            if (prev == nullptr) return false;
+            if (current != nullptr && current->key == key) {
+                index.push_back({prev, level});
+            }
+            if (current == nullptr || current->key > key) {
+                current = prev;
+            }
+            level--;
+        }
+        return index.size() != 0;
     }
 
  private:
@@ -305,6 +336,22 @@ void SkipList<K, V, Node, Alloc, RandomLevel>::insertOne(Node<K, V> &node) {
         this->maxLevel = node.topLevel;
     }
     this->total = this->total + 1;
+}
+
+
+template<
+    class K, class V,
+    template <typename Key, typename Value> class Node,
+    class Alloc,
+    class RandomLevel
+>
+void SkipList<K, V, Node, Alloc, RandomLevel>::deleteOne(const K &key) {
+    std::vector<std::pair<Node<K, V>*, int>> index;
+    if (!this->findNode(key, index)) return;
+    for (auto node_level : index) {
+        std::cout << "Node key: " << node_level.first->key;
+        std::cout << " level: " << node_level.second << std::endl;; 
+    }
 }
 
 

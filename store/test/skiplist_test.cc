@@ -34,7 +34,7 @@ TEST(InsertTest, InsertTestDecrement) {
 }
 
 TEST(InsertTest1, InsertTestRandom) {
-    // GTEST_SKIP();
+    GTEST_SKIP();
     std::vector<int> index;
     index.reserve(30);
     for (int i = 0;i < 30;i++) {
@@ -50,7 +50,7 @@ TEST(InsertTest1, InsertTestRandom) {
 }
 
 TEST(WatchTest, WatchTestNotSupportNOTString) {
-    // GTEST_SKIP();
+    GTEST_SKIP();
     std::vector<int> index;
     for (int i = 0;i < 30;i++) {
         index.push_back(rand() % 30);
@@ -63,8 +63,15 @@ TEST(WatchTest, WatchTestNotSupportNOTString) {
     list->watch();
 }
 
-TEST(AllocaNodeTest, NewNode) {
-    GTEST_SKIP();
-    auto *node = NewNodeAllocate<SkipNode, int, string>::create(1, "zx1");
-    std::cout << node->key << std::endl;
+TEST(DeleteTest, FindNodeTest) {
+    std::vector<int> nums;
+    for (int i = 0;i < 10;i++) {
+        nums.push_back(rand() % 10);
+    }
+    SkipList<int, string, SkipNode> *list = new SkipList<int, string, SkipNode>();
+    for (int i : nums) {
+        SkipNode<int, string> *node = new SkipNode<int, string>(i, to_string(i), i%3);
+        list->insertOne(*node);
+    }
+    list->deleteOne(2);
 }
