@@ -9,7 +9,7 @@
  *          prev = node_index_map[current];
  *  上面的代码原意是将prev更新为当前节点的index，但是由于错误的顺序，导致prev赋值为了current的next节点的index值
  *
- * 6.
+ * 6.new出来的skipnode通过free的方式进行释放
 */
 #ifndef ZEDIS_STORE_SKIPLIST_H_
 #define ZEDIS_STORE_SKIPLIST_H_
@@ -30,10 +30,10 @@
 
 /**
  * 用作watch函数特例化。
- * SkipList中有一个watch函数，由于打印时需要知道每个key的长度，
- * 由于不同类型的 V 打印长度的情况也不同
- * 所以watch只限定模板参数 V 为string的情况，其他类型的 V 只会
- * 打印不支持的语句
+ * SkipList中有一个watch函数，由于打印时需要知道每个value的长度，
+ * 由于不同类型的V获取长度的方式也不同
+ * 所以为了简单，watch只限定模板参数 V 为string的情况，其他类型的V只会
+ * 打印不支持的信息
  */ 
 struct NoStringVersionTag {};
 struct StringVersionTag {};
@@ -63,6 +63,15 @@ class SkipNode {
         this->init();
     }
 
+    ~SkipNode() {
+        free(this->levelNext);
+    }
+
+ public:
+    V& getValue() {return this->value;}
+    void setValue(V& value) {this->value = value;}
+
+ public:
     void expansion(int n) {
         SkipNode<K, V> **newLevelNext = (SkipNode<K, V>**)realloc(this->levelNext, sizeof(SkipNode<K, V>*) * (n + 1));
         if (newLevelNext == nullptr) {
@@ -71,23 +80,17 @@ class SkipNode {
             free(this->levelNext);
         }
         this->levelNext = newLevelNext;
-        for (int i = this->topLevel + 1;i < n + 1;i++) {
-            this->levelNext[i] = nullptr;
-        }
+        memset(this->levelNext + this->topLevel + 1, 0, sizeof(SkipNode<K, V>*) * (n - this->topLevel));
         this->topLevel = n;
     }
 
-
+    // TO-DO, 可以进一步优化，提前开辟出空间，然后使用placement new，
+    // 可以使得levelNext中的元素紧邻对象
     void init() {
         SkipNode<K, V> **levelNext = (SkipNode<K, V>**)malloc(sizeof(SkipNode<K, V>*) * (this->topLevel + 1));
         this->levelNext = levelNext;
-        for (int i = 0;i <= this->topLevel;i++) {
-            this->levelNext[i] = nullptr;
-        }
+        memset(this->levelNext, 0, sizeof(SkipNode<K, V>*) * (this->topLevel + 1));
     }
-
-    V& getValue() {return this->value;}
-    void setValue(V& value) {this->value = value;}
 
  public:
     K key;
@@ -109,10 +112,12 @@ class SkipNode {
  * 与SkipList的类型一致.
  * 注：如果想在域内控制某个模板参数的模板参数，可以使用template template parameter的方式
  * 
+ * 当前版本的skiplist有一个致命的缺陷：插入的数据，如果大量的递减key，则会退化成单链表,
+ * 后续需要通过设置哨兵head解决这个问题。
 */
 template<
     class K, class V,
-    template <typename Key, typename Value> class Node = SkipNode,
+    template <class Key, class Value> class Node = SkipNode,
     class Alloc = NewNodeAllocate<Node, K, V>,
     class RandomLevel = BinarySelect
 >
@@ -135,14 +140,13 @@ class SkipList {
 
     void deleteOne(const K &key);
 
-    void find();
+    void find(const K &key);
 
     // 跳表序列化
     void flush();
 
     // 适合查看极小量数据,debug用
     void watch() {
-        // std::cout << "list total node is " << this->total << std::endl;
         this->watchInner(typename VersionDispatcher<V>::Tag {});
     }
 
@@ -184,6 +188,7 @@ class SkipList {
         return true;
     }
 
+ public:
     bool findNode(const K& key, std::vector<std::pair<Node<K, V>*, int> >& index) {
         int level = this->head->topLevel;
         Node<K, V> *prev, *current;
@@ -197,6 +202,7 @@ class SkipList {
             if (prev == nullptr) return false;
             if (current != nullptr && current->key == key) {
                 index.push_back({prev, level});
+                current = prev;
             }
             if (current == nullptr || current->key > key) {
                 current = prev;
@@ -270,6 +276,7 @@ class SkipList {
         std::cout << std::endl;
     }
 
+    // 使得node成为新的head，但是并不删除原始head
     void headTransfer(Node<K, V> &node) {
         if (node.topLevel < this->head->topLevel) {
              node.expansion(this->head->topLevel); 
@@ -292,10 +299,9 @@ class SkipList {
     }
 };
 
-
 template<
-    typename K, typename V,
-    template <typename Key, typename Value> class Node,
+    class K, class V,
+    template <class Key, class Value> class Node,
     class Alloc,
     class RandomLevel
 >
@@ -312,7 +318,7 @@ void SkipList<K, V, Node, Alloc, RandomLevel>::insertOne(Node<K, V> &node) {
 
     // 新的节点成为head
     if (!this->findHoles(node, index)) {
-        return this->headTransfer(node);
+        return this->headTransfer(node);  
     }
 
     if(index[0]->key == node.key) {
@@ -338,22 +344,55 @@ void SkipList<K, V, Node, Alloc, RandomLevel>::insertOne(Node<K, V> &node) {
     this->total = this->total + 1;
 }
 
-
 template<
     class K, class V,
-    template <typename Key, typename Value> class Node,
+    template <class Key, class Value> class Node,
     class Alloc,
     class RandomLevel
 >
 void SkipList<K, V, Node, Alloc, RandomLevel>::deleteOne(const K &key) {
+    if (this->head == nullptr) return;
     std::vector<std::pair<Node<K, V>*, int>> index;
-    if (!this->findNode(key, index)) return;
-    for (auto node_level : index) {
-        std::cout << "Node key: " << node_level.first->key;
-        std::cout << " level: " << node_level.second << std::endl;; 
+    // 删除节点
+    if (this->findNode(key, index)) {
+        Node<K, V> *deletingNode = index[0].first->levelNext[index[0].second];
+        for (auto node_level : index) {
+            node_level.first->levelNext[node_level.second] = deletingNode->levelNext[node_level.second];
+        }
+        delete deletingNode;
+        this->total--;
+    // 删除头节点，并且list中只有头节点
+    } else if (this->head->key == key && this->head->levelNext[0] == nullptr) {
+        delete this->head;
+        this->head = nullptr;
+        this->total = 0;
+    // 删除头节点  
+    } else if (this->head->levelNext[0] != nullptr) {
+        Node<K, V> *newHead = this->head->levelNext[0];
+        int oldLevel = newHead->topLevel;
+        int headLevel = this->head->topLevel;
+        if (newHead->topLevel < this->head->topLevel) {
+            newHead->expansion(this->head->topLevel);
+        }
+        while (headLevel > oldLevel) {
+            newHead->levelNext[headLevel] = this->head->levelNext[headLevel];
+            headLevel--;
+        }
+        delete this->head;
+        this->head = newHead;
+        this->total--;
     }
+    // 该节点不存在
+    else return;
 }
 
+// template<
+//     class K, class V,
+//     template <class Key, class Value> class Node,
+//     class Alloc,
+//     class RandomLevel
+// >
+// V 
 
 
 /**
@@ -367,8 +406,8 @@ struct Type2Type {
 };
 
 template<
-    typename K,
-    template <typename Key, typename Value> class Node,
+    class K,
+    template <class Key, class Value> class Node,
     class RandomLevel
 >
 void watch_tt(SkipList<K, std::string, Node, RandomLevel>* list, Type2Type<std::string>) {
@@ -376,8 +415,8 @@ void watch_tt(SkipList<K, std::string, Node, RandomLevel>* list, Type2Type<std::
 }
 
 template<
-    typename K, typename V,
-    template <typename Key, typename Value> class Node,
+    class K, class V,
+    template <class Key, class Value> class Node,
     class RandomLevel
 >
 void watch_tt(SkipList<K, V, Node, RandomLevel>* list, Type2Type<V>) {

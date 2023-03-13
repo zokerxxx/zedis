@@ -1,4 +1,3 @@
-#include <gtest/gtest.h>
 #include <string>
 #include <iomanip>
 #include <cstdlib>
@@ -10,6 +9,9 @@
 #include <algorithm>
 
 #include <skipList.h>
+
+#include <gtest/gtest.h>
+
 using namespace std;
 
 TEST(InsertTest, InsertTestIncrement) {
@@ -33,14 +35,18 @@ TEST(InsertTest, InsertTestDecrement) {
     list->watch();
 }
 
-TEST(InsertTest1, InsertTestRandom) {
+TEST(InsertTest, InsertTestRandom) {
     GTEST_SKIP();
     std::vector<int> index;
-    index.reserve(30);
-    for (int i = 0;i < 30;i++) {
+    index.reserve(10);
+    for (int i = 0;i < 10;i++) {
         index.push_back(i);
     }
     random_shuffle(index.begin(), index.end());
+    for (int num : index) {
+        cout << num << " ";
+    }
+    cout << endl;
     SkipList<int, string, SkipNode> *list = new SkipList<int, string, SkipNode>();
     for (int i : index) {
         SkipNode<int, string> *node = new SkipNode<int, string>(i, to_string(i));
@@ -64,14 +70,25 @@ TEST(WatchTest, WatchTestNotSupportNOTString) {
 }
 
 TEST(DeleteTest, FindNodeTest) {
+    GTEST_SKIP();
     std::vector<int> nums;
-    for (int i = 0;i < 10;i++) {
-        nums.push_back(rand() % 10);
+    for (int i = 0;i <= 100000;i++) {
+        nums.push_back(i);
     }
+    random_shuffle(nums.begin(), nums.end());
+
     SkipList<int, string, SkipNode> *list = new SkipList<int, string, SkipNode>();
     for (int i : nums) {
-        SkipNode<int, string> *node = new SkipNode<int, string>(i, to_string(i), i%3);
+        SkipNode<int, string> *node = new SkipNode<int, string>(i, to_string(i));
         list->insertOne(*node);
     }
-    list->deleteOne(2);
+    // list->watch();
+    cout << endl;
+    std::vector<std::pair<SkipNode<int ,string>*, int>> index;
+    
+    std::vector<int>  deleteNodes;
+    for (int i = 100000;i >= 0;i--) {
+        list->deleteOne(nums[i]);
+    }
+    list->watch();
 }

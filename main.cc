@@ -1,46 +1,32 @@
 #include <iostream>
 #include <string.h>
+
+#include <skipList.h>
+
 using namespace std;
 
-class A {
- public:
-    A() {
-        cout << "A cons" << endl;
-        this->buffer = (char*)malloc(10);
-        this->buffer = "zhengxin";
-    }
-//  protected:
-    ~A() {
-        cout << "A des" << endl;
-        // free(buffer);
-    }
-
-    A(const A& a) {
-        cout << "copy cons" << endl;
-    }
-
-    const A& operator=(const A& a) {
-        cout << "== cons" << endl;
-        this->buffer = a.buffer;
-    }
-
- public:
-    char *buffer = nullptr;
-};
-
-class B {
- public:
-    B() = default;
-    B(A &a) : a(a) {
-        // this->a = a;
-        // printf("a address in B %p\n", this->a.buffer);
-    }
- public:
-    A a;
-};
-
 int main() {
+    // cout << a->buffer << endl;
+    std::vector<int> nums;
+    for (int i = 0;i <= 100000;i++) {
+        nums.push_back(i);
+    }
+    random_shuffle(nums.begin(), nums.end());
 
-
+    SkipList<int, string, SkipNode> *list = new SkipList<int, string, SkipNode>();
+    for (int i : nums) {
+        SkipNode<int, string> *node = new SkipNode<int, string>(i, to_string(i));
+        list->insertOne(*node);
+    }
+    // list->watch();
+    cout << endl;
+    std::vector<std::pair<SkipNode<int ,string>*, int>> index;
+    
+    std::vector<int>  deleteNodes;
+    for (int i = 100000;i >= 0;i--) {
+        list->deleteOne(nums[i]);
+    }
+    list->watch();
+    delete list;
     return 0;
 }
